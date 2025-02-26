@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -24,6 +25,7 @@ func NewAuth() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+	fmt.Println("This is Faiz")
 
 	googleClientId := os.Getenv("GOOGLE_CLIENT_ID")
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
