@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule a Meeting</title>
+</head>
+
+<body>
+    <h2>Schedule a Meeting</h2>
+    <form id="meetingForm">
+        <label>Title:</label>
+        <input type="text" id="title" required><br><br>
+
+        <label>Description:</label>
+        <textarea id="description"></textarea><br><br>
+
+        <label>Attendees (comma-separated emails):</label>
+        <input type="text" id="attendees"><br><br>
+
+        <label>Start Time:</label>
+        <input type="datetime-local" id="start_time" required><br><br>
+
+        <label>End Time:</label>
+        <input type="datetime-local" id="end_time" required><br><br>
+
+        <button type="submit">Create Meeting</button>
+    </form>
+
+    <h3>Upcoming Meetings</h3>
+    <div id="meetings"></div>
+
+    <script>
+        document.getElementById("meetingForm").addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            const title = document.getElementById("title").value;
+            const description = document.getElementById("description").value;
+            const attendees = document.getElementById("attendees").value.split(",").map(email => email.trim()).filter(email => email);
+            let startTime = new Date(document.getElementById("start_time").value).toISOString();
+            let endTime = new Date(document.getElementById("end_time").value).toISOString();
+            const token = new URLSearchParams(window.location.search).get("token");
+
+            const response = await fetch("/create-meeting", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({ title, description, attendees, startTime, endTime })
+            });
+
+            const data = await response.json();
+            alert(data.message);
+            fetchMeetings();
+        });
+
+        async function fetchMeetings() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get("token");
+            const meetingsContainer = document.getElementById("meetings");
+            meetingsContainer.innerHTML = "<p>Loading meetings...</p>";
+
+            try {
+                const response = await fetch(`/upcoming-meetings`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                meetingsContainer.innerHTML = "";
+
+                if (!data.events || data.events.length === 0) {
+                    meetingsContainer.innerHTML = "<p>No upcoming meetings this week.</p>";
+                    return;
+                }
+
+                data.events.forEach(event => {
+                    const div = document.createElement("div");
+                    div.style.border = "1px solid #ccc";
+                    div.style.marginBottom = "10px";
+                    div.style.padding = "10px";
+                    div.style.borderRadius = "5px";
+
+                    const summary = event.summary || "Untitled Event";
+                    let startTime = event.start?.dateTime ? new Date(event.start.dateTime).toLocaleString() : "Time not specified";
+                    let endTime = event.end?.dateTime ? new Date(event.end.dateTime).toLocaleString() : "Time not specified";
+                    const attendees = event.attendees ? event.attendees.map(attendee => attendee.email).join(", ") : "None";
+
+                    div.innerHTML = `
+                        <strong>${summary}</strong><br>
+                        Start: ${startTime}<br>
+                        End: ${endTime}<br>
+                        Description: ${event.description || "No description provided"}<br>
+                        Attendees: ${attendees}
+                    `;
+
+                    meetingsContainer.appendChild(div);
+                });
+            } catch (error) {
+                console.error("Error fetching meetings:", error);
+                meetingsContainer.innerHTML = "<p>Error loading meetings: " + error.message + "</p>";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", fetchMeetings);
+    </script>
+</body>
+
+</html>
