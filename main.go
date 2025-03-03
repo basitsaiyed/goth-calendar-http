@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	db "goauthDemo/database"
 	"goauthDemo/internal/auth"
 	"goauthDemo/middleware"
@@ -14,15 +13,34 @@ import (
 )
 
 func main() {
-	db.InitDB()
-	var SecretKEY = os.Getenv("SECRET_KEY")
-	fmt.Println("Secret Key:", SecretKEY)
+	// Load environment variables first
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Warning: Error loading .env file")
+		log.Println("Warning: Error loading .env file, will use environment variables")
 	}
-	fmt.Println("SECRET_KEY:", os.Getenv("SECRET_KEY")) // Debug
+
+	// Check for required environment variables
+	secretKey := os.Getenv("SECRET_KEY")
+	if secretKey == "" {
+		log.Fatal("SECRET_KEY environment variable is not set")
+	}
+	log.Printf("SECRET_KEY is set (length: %d)", len(secretKey))
+
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL environment variable is not set")
+	}
+	log.Println("DB_URL is set")
+
+	// Initialize database
+	db.InitDB()
+	log.Println("Database initialized")
+
+	// Initialize authentication
 	auth.NewAuth()
+	log.Println("Authentication initialized")
+
+	// Setup Gin router
 	r := gin.Default()
 
 	// Web routes
@@ -35,9 +53,11 @@ func main() {
 	r.POST("/create-meeting", middleware.JWTAuthMiddleware(), routes.CreateMeeting)
 	r.GET("/upcoming-meetings", middleware.JWTAuthMiddleware(), routes.GetUpcomingMeetings)
 
-	// Test endpoint - would be disabled in production
-	// r.POST("/api/test-token", routes.GetTestToken)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-	log.Println("Server starting on :8080")
-	r.Run()
+	log.Printf("Server starting on :%s", port)
+	r.Run(":" + port)
 }

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,20 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
 )
-
-// var jwtSecret = []byte("your_secret_key")
 
 const UserCtxKey = "user"
 
 func JWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		err := godotenv.Load()
-		if err != nil {
-			log.Fatal("Error loading .env file")
-		}
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
@@ -35,8 +26,8 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 
 		claims, err := ValidateJWT(tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token key?"})
-			c.Abort() // Important to stop further execution
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token: " + err.Error()})
+			c.Abort()
 			return
 		}
 
@@ -47,17 +38,15 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 }
 
 func ValidateJWT(tokenStr string) (jwt.MapClaims, error) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	var jwtSecret = []byte(os.Getenv("SECRET_KEY"))
-	fmt.Println("JWT Secret:", string(jwtSecret)) // Debug
-
-	fmt.Println("Validating Token:", tokenStr)
+	jwtSecret := []byte(os.Getenv("SECRET_KEY"))
+	
+	// Log token length for debugging without exposing the full token
+	log.Printf("Validating token (length: %d)", len(tokenStr))
+	
+	// Log secret key length for debugging without exposing the full secret
+	log.Printf("Using secret key (length: %d)", len(jwtSecret))
 
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		fmt.Println("JWT Secret:", string(jwtSecret)) // Debug
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
@@ -65,21 +54,20 @@ func ValidateJWT(tokenStr string) (jwt.MapClaims, error) {
 	})
 
 	if err != nil {
-		fmt.Println("JWT Parsing Error:", err)
-		return nil, errors.New("invalid token")
+		log.Printf("JWT Parsing Error: %v", err)
+		return nil, err
 	}
 
 	if !token.Valid {
-		fmt.Println("Token is Invalid")
 		return nil, errors.New("invalid token")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		fmt.Println("Invalid Claims")
 		return nil, errors.New("invalid claims in token")
 	}
 
-	fmt.Println("JWT Claims:", claims)
+	// Log claim details for debugging without exposing sensitive information
+	log.Printf("JWT Claims successfully validated for user_id: %v", claims["user_id"])
 	return claims, nil
 }

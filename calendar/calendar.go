@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/calendar/v3"
@@ -15,12 +16,45 @@ func GetCalendarEvents(token string) ([]*calendar.Event, error) {
 
 	srv, err := calendar.NewService(ctx, client)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to retrieve Calendar client: %v", err)
+		return nil, fmt.Errorf("unable to retrieve Calendar client: %v", err)
 	}
 
 	events, err := srv.Events.List("primary").Do()
 	if err != nil {
-		return nil, fmt.Errorf("Unable to retrieve events: %v", err)
+		return nil, fmt.Errorf("unable to retrieve events: %v", err)
+	}
+
+	return events.Items, nil
+}
+
+// GetUpcomingWeekEvents retrieves events for the upcoming week only
+func GetUpcomingWeekEvents(token string) ([]*calendar.Event, error) {
+	ctx := context.Background()
+	client := option.WithTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}))
+
+	srv, err := calendar.NewService(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve Calendar client: %v", err)
+	}
+
+	// Calculate time bounds for the next week
+	now := time.Now()
+	oneWeekLater := now.AddDate(0, 0, 7)
+
+	// Format times in RFC3339 format as required by Google Calendar API
+	timeMin := now.Format(time.RFC3339)
+	timeMax := oneWeekLater.Format(time.RFC3339)
+
+	// Query events within the time range
+	events, err := srv.Events.List("primary").
+		TimeMin(timeMin).
+		TimeMax(timeMax).
+		OrderBy("startTime").
+		SingleEvents(true). // Expand recurring events
+		Do()
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve events: %v", err)
 	}
 
 	return events.Items, nil
@@ -64,5 +98,3 @@ func CreateEvent(token string, title, startTime, endTime, description string, at
 	fmt.Println("Meeting Created:", createdEvent.HtmlLink)
 	return nil
 }
-
-

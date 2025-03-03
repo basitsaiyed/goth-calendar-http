@@ -7,10 +7,10 @@ import (
 	"goauthDemo/middleware"
 	"log"
 	"net/http"
-	"strings"
 	"text/template"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/markbates/goth/gothic"
 )
 
@@ -82,7 +82,7 @@ func ScheduleMeeting(c *gin.Context) {
 	c.File("templates/schedule-meeting.html")
 }
 
-// Create Meeting
+// Create Meeting - Fixed to use the middleware properly
 func CreateMeeting(c *gin.Context) {
 	var request struct {
 		Title       string   `json:"title"`
@@ -93,48 +93,67 @@ func CreateMeeting(c *gin.Context) {
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request"})
-		return
-	}
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
-		c.Abort()
+		c.JSON(400, gin.H{"error": "Invalid request: " + err.Error()})
 		return
 	}
 
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	// Get claims from context (set by middleware)
+	claimsValue, exists := c.Get(middleware.UserCtxKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User context missing"})
+		return
+	}
+	
+	claims, ok := claimsValue.(jwt.MapClaims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
+		return
+	}
 
-	claims, err := middleware.ValidateJWT(tokenString)
+	accessToken, ok := claims["access_token"].(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Access token missing from claims"})
+		return
+	}
+
+	// Log details for debugging
+	log.Printf("Creating calendar event: Title=%s, Attendees=%v", request.Title, request.Attendees)
+
+	err := calendar.CreateEvent(accessToken, request.Title, request.StartTime, request.EndTime, request.Description, request.Attendees)
 	if err != nil {
-		c.JSON(401, gin.H{"error": "Invalid token"})
-		c.Abort()
-		return
-	}
-
-	accessToken := claims["access_token"].(string)
-	// request.Attendees = append(request.Attendees, userID)
-	// Use the token to create a meeting in Google Calendar
-
-	err = calendar.CreateEvent(accessToken, request.Title, request.StartTime, request.EndTime, request.Description, request.Attendees)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create meeting"})
+		log.Printf("Error creating event: %v", err)
+		c.JSON(500, gin.H{"error": "Failed to create meeting: " + err.Error()})
 		return
 	}
 
 	c.JSON(200, gin.H{"message": "Meeting created successfully!"})
 }
 
-// Fetch Upcoming Meetings
+// Fetch Upcoming Meetings - Fixed to properly retrieve the access token
 func GetUpcomingMeetings(c *gin.Context) {
-	// The middleware already validated the JWT and put the access_token in the context
-	accessToken, exists := c.Get("access_token")
+	// Get claims from context (set by middleware)
+	claimsValue, exists := c.Get(middleware.UserCtxKey)
 	if !exists {
-		c.JSON(401, gin.H{"error": "Access token not found"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User context missing"})
+		return
+	}
+	
+	claims, ok := claimsValue.(jwt.MapClaims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user context"})
 		return
 	}
 
-	events, err := calendar.GetCalendarEvents(accessToken.(string))
+	accessToken, ok := claims["access_token"].(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Access token missing from claims"})
+		return
+	}
+
+	// Log for debugging
+	log.Printf("Fetching calendar events with token (length: %d)", len(accessToken))
+
+	events, err := calendar.GetCalendarEvents(accessToken)
 	if err != nil {
 		log.Printf("Error fetching upcoming meetings: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"fmt"
 	"goauthDemo/models"
 	"log"
 	"os"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/sessions"
-	"github.com/joho/godotenv"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/google"
@@ -27,15 +25,12 @@ const (
 
 func NewAuth() {
 	// Initialize auth
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	// SecretKEY := os.Getenv("SECRET_KEY")
-	// fmt.Println("This is Faiz")
-
 	googleClientId := os.Getenv("GOOGLE_CLIENT_ID")
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
+	
+	if googleClientId == "" || googleClientSecret == "" {
+		log.Fatal("Google OAuth credentials are missing. Ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.")
+	}
 
 	store := sessions.NewCookieStore([]byte(key))
 	store.MaxAge(maxAge)
@@ -45,7 +40,6 @@ func NewAuth() {
 	gothic.Store = store
 	goth.UseProviders(
 		google.New(googleClientId, googleClientSecret, "http://localhost:8080/auth/google/callback", "email", "profile", "https://www.googleapis.com/auth/calendar.events"),
-		// github.New(os.Getenv("GITHUB_CLIENT_ID"), os.Getenv("GITHUB_CLIENT_SECRET"), "http://localhost:8080/auth/github/callback"),
 	)
 
 	if db.DB == nil {
@@ -78,13 +72,20 @@ func SaveUserToDB(user goth.User) error {
 
 // GenerateJWT generates a JWT token for authenticated users
 func GenerateJWT(userID, accessToken string) (string, error) {
+	jwtSecret := []byte(os.Getenv("SECRET_KEY"))
+	
+	if len(jwtSecret) == 0 {
+		log.Println("WARNING: SECRET_KEY is empty or not set")
+	} else {
+		log.Printf("Using JWT secret key (length: %d)", len(jwtSecret))
+	}
+	
 	claims := jwt.MapClaims{
 		"user_id":      userID,
 		"access_token": accessToken,
 		"exp":          time.Now().Add(time.Hour * 24).Unix(), // Token expires in 24 hours
 	}
-	jwtSecret := []byte(os.Getenv("SECRET_KEY"))
-	fmt.Println("JWT Secret:", string(jwtSecret)) // Debug
+	
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtSecret)
 }
