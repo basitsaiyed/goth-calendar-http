@@ -4,8 +4,10 @@ import (
 	"context"
 	"goauthDemo/calendar"
 	"goauthDemo/internal/auth"
+	"goauthDemo/middleware"
 	"log"
 	"net/http"
+	"strings"
 	"text/template"
 
 	"github.com/gin-gonic/gin"
@@ -45,13 +47,34 @@ func AuthCallback(c *gin.Context) {
 		return
 	}
 
+	// Save user details to database
+	err = auth.SaveUserToDB(user)
+	if err != nil {
+		log.Printf("Error saving user to database: %v", err)
+		// Continue anyway - don't fail the authentication
+	}
+
 	token, err := auth.GenerateJWT(user.UserID, user.AccessToken)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	c.Redirect(http.StatusFound, "/schedule-meeting?token="+token)
+	// For web clients, redirect to the frontend
+	if c.GetHeader("Accept") == "text/html" {
+		c.Redirect(http.StatusFound, "/schedule-meeting?token="+token)
+		return
+	}
+
+	// For API clients (like Thunder Client), return JSON
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":    user.UserID,
+			"name":  user.Name,
+			"email": user.Email,
+		},
+	})
 }
 
 // Schedule Meeting Page
@@ -73,14 +96,27 @@ func CreateMeeting(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Invalid request"})
 		return
 	}
-
-	accessToken, exists := c.Get("access_token")
-	if !exists {
-		c.JSON(401, gin.H{"error": "Access token not found"})
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
+		c.Abort()
 		return
 	}
 
-	err := calendar.CreateEvent(accessToken.(string), request.Title, request.StartTime, request.EndTime, request.Description, request.Attendees)
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	claims, err := middleware.ValidateJWT(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{"error": "Invalid token"})
+		c.Abort()
+		return
+	}
+
+	accessToken := claims["access_token"].(string)
+	// request.Attendees = append(request.Attendees, userID)
+	// Use the token to create a meeting in Google Calendar
+
+	err = calendar.CreateEvent(accessToken, request.Title, request.StartTime, request.EndTime, request.Description, request.Attendees)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to create meeting"})
 		return
@@ -91,19 +127,19 @@ func CreateMeeting(c *gin.Context) {
 
 // Fetch Upcoming Meetings
 func GetUpcomingMeetings(c *gin.Context) {
-    // The middleware already validated the JWT and put the access_token in the context
-    accessToken, exists := c.Get("access_token")
-    if !exists {
-        c.JSON(401, gin.H{"error": "Access token not found"})
-        return
-    }
+	// The middleware already validated the JWT and put the access_token in the context
+	accessToken, exists := c.Get("access_token")
+	if !exists {
+		c.JSON(401, gin.H{"error": "Access token not found"})
+		return
+	}
 
-    events, err := calendar.GetCalendarEvents(accessToken.(string))
-    if err != nil {
-        log.Printf("Error fetching upcoming meetings: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
+	events, err := calendar.GetCalendarEvents(accessToken.(string))
+	if err != nil {
+		log.Printf("Error fetching upcoming meetings: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"events": events})
+	c.JSON(http.StatusOK, gin.H{"events": events})
 }
