@@ -58,7 +58,6 @@ func (r *UserRepository) CreateOrUpdateUser(user *models.User) error {
 	// User exists, update fields
 	existingUser.Email = user.Email
 	existingUser.Name = user.Name
-	existingUser.Picture = user.Picture
 	existingUser.AccessToken = user.AccessToken
 	existingUser.RefreshToken = user.RefreshToken
 	existingUser.TokenExpiry = user.TokenExpiry

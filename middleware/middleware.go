@@ -1,24 +1,25 @@
 package middleware
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const UserCtxKey = "user"
+type contextKey string
 
-func JWTAuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
+const UserCtxKey contextKey = "user"
+
+func JWTAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
-			c.Abort()
+			http.Error(w, "Authorization header missing", http.StatusUnauthorized)
 			return
 		}
 
@@ -26,15 +27,14 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 
 		claims, err := ValidateJWT(tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token: " + err.Error()})
-			c.Abort()
+			http.Error(w, "Invalid token: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
 
 		// Store claims in request context
-		c.Set(UserCtxKey, claims)
-		c.Next()
-	}
+		ctx := context.WithValue(r.Context(), UserCtxKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func ValidateJWT(tokenStr string) (jwt.MapClaims, error) {

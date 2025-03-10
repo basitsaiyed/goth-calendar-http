@@ -61,7 +61,6 @@ func SaveUserToDB(user goth.User) error {
 		GoogleID:     user.UserID,
 		Email:        user.Email,
 		Name:         user.Name,
-		Picture:      user.AvatarURL,
 		AccessToken:  user.AccessToken,
 		RefreshToken: user.RefreshToken,
 		TokenExpiry:  tokenExpiry,

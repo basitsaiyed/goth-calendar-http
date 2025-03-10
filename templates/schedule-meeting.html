@@ -83,16 +83,17 @@
                 }
 
                 data.events.forEach(event => {
+                    // console.log("Event data:", event);
                     const div = document.createElement("div");
                     div.style.border = "1px solid #ccc";
                     div.style.marginBottom = "10px";
                     div.style.padding = "10px";
                     div.style.borderRadius = "5px";
 
-                    const summary = event.summary || "Untitled Event";
-                    let startTime = event.start?.dateTime ? new Date(event.start.dateTime).toLocaleString() : "Time not specified";
-                    let endTime = event.end?.dateTime ? new Date(event.end.dateTime).toLocaleString() : "Time not specified";
-                    const attendees = event.attendees ? event.attendees.map(attendee => attendee.email).join(", ") : "None";
+                    const summary = event.title || "Untitled Event";
+                    let startTime = event.startTime || "Time not specified";
+                    let endTime = event.endTime || "Time not specified";
+                    const attendees = event.attendees ? event.attendees.join(", ") : "None";
 
                     div.innerHTML = `
                         <strong>${summary}</strong><br>

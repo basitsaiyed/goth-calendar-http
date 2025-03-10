@@ -10,7 +10,6 @@ type User struct {
 	GoogleID     string    `json:"google_id"`
 	Email        string    `json:"email"`
 	Name         string    `json:"name"`
-	Picture      string    `json:"picture"`
 	AccessToken  string    `json:"-"`
 	RefreshToken string    `json:"-"`
 	TokenExpiry  time.Time `json:"-"`
